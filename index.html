@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<!-- The Zone — a focus-state timer. Single file. Voice via Web Speech, sound via Tone.js. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>The Zone</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@300;400;500;600&display=swap');
+
+  :root{
+    --bg:#06070b;
+    --ink:#eae6df;
+    --muted:#7d818f;
+    --faint:#3a3d49;
+    --ember:#e8a268;
+    --ember-soft:#caa07a;
+    --teal:#5fb6a8;
+    --line:rgba(234,230,223,.08);
+    --serif:'Instrument Serif', Georgia, serif;
+    --sans:'Hanken Grotesk', -apple-system, system-ui, sans-serif;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-weight:300;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+    position:relative;
+  }
+
+  .aurora{position:fixed; inset:-40%; z-index:0; filter:blur(80px); opacity:.55; pointer-events:none;}
+  .aurora span{position:absolute; border-radius:50%; mix-blend-mode:screen; will-change:transform;}
+  .a1{width:50vw; height:50vw; left:5%; top:10%; background:radial-gradient(circle,#1c3a4a,transparent 70%); animation:drift1 38s ease-in-out infinite;}
+  .a2{width:42vw; height:42vw; right:2%; top:30%; background:radial-gradient(circle,#3a2a1e,transparent 70%); animation:drift2 46s ease-in-out infinite;}
+  .a3{width:46vw; height:46vw; left:25%; bottom:0%; background:radial-gradient(circle,#241c34,transparent 70%); animation:drift3 54s ease-in-out infinite;}
+  @keyframes drift1{0%,100%{transform:translate(0,0)}50%{transform:translate(8vw,6vh)}}
+  @keyframes drift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-7vw,4vh)}}
+  @keyframes drift3{0%,100%{transform:translate(0,0)}50%{transform:translate(5vw,-6vh)}}
+
+  .grain{position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.04;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+  .stage{position:relative; z-index:2; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px; text-align:center;}
+
+  .orb-wrap{position:relative; width:min(64vw,340px); height:min(64vw,340px); display:flex; align-items:center; justify-content:center; margin-bottom:10px;}
+  .ring{position:absolute; inset:0; border-radius:50%; border:1px solid var(--line);}
+  .ring.prog{transform:rotate(-90deg);}
+  .orb{
+    position:absolute; width:46%; height:46%; border-radius:50%;
+    background:radial-gradient(circle at 38% 34%, rgba(255,255,255,.22), rgba(232,162,104,.10) 42%, transparent 70%);
+    box-shadow:0 0 70px 8px rgba(232,162,104,.10), inset 0 0 50px rgba(255,255,255,.05);
+    transition:transform 200ms linear, box-shadow 1.2s ease, background 1.2s ease;
+    will-change:transform;
+  }
+  .orb.zone{
+    background:radial-gradient(circle at 38% 34%, rgba(255,255,255,.18), rgba(95,182,168,.10) 42%, transparent 70%);
+    box-shadow:0 0 80px 10px rgba(95,182,168,.10), inset 0 0 50px rgba(255,255,255,.05);
+    animation:pulse 9s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+
+  .kicker{font-family:var(--serif); font-style:italic; font-size:15px; color:var(--ember-soft); letter-spacing:.02em; margin-bottom:14px; opacity:.9;}
+  .title{font-family:var(--serif); font-size:clamp(46px,12vw,92px); line-height:.92; letter-spacing:-.01em; margin-bottom:8px;}
+  .sub{color:var(--muted); font-size:14px; max-width:30ch; line-height:1.6; margin:0 auto 30px;}
+
+  .presets{display:flex; gap:10px; margin-bottom:22px;}
+  .chip{font-family:var(--sans); font-weight:400; font-size:13px; color:var(--muted); background:transparent; border:1px solid var(--line); border-radius:999px; padding:10px 16px; cursor:pointer; transition:.25s; letter-spacing:.01em;}
+  .chip:hover{color:var(--ink); border-color:var(--faint);}
+  .chip.on{color:var(--bg); background:var(--ink); border-color:var(--ink);}
+  .chip small{display:block; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; opacity:.6; margin-top:2px;}
+
+  .opts{display:flex; gap:22px; margin-bottom:32px; color:var(--muted); font-size:12.5px;}
+  .opt{display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;}
+  .tg{width:34px; height:19px; border-radius:999px; background:var(--faint); position:relative; transition:.25s;}
+  .tg::after{content:''; position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%; background:var(--ink); transition:.25s;}
+  .opt.on .tg{background:var(--ember-soft);}
+  .opt.on .tg::after{transform:translateX(15px);}
+
+  .start{font-family:var(--serif); font-size:24px; color:var(--ink); background:transparent; border:1px solid var(--faint); border-radius:999px; padding:16px 46px; cursor:pointer; transition:.3s; letter-spacing:.01em;}
+  .start:hover{border-color:var(--ember-soft); box-shadow:0 0 40px rgba(232,162,104,.12); color:#fff;}
+
+  .phase{font-family:var(--sans); font-weight:500; font-size:11px; letter-spacing:.32em; text-transform:uppercase; color:var(--ember-soft); margin-bottom:18px; transition:color 1s;}
+  .phase.zone{color:var(--teal);}
+  .cue{font-family:var(--serif); font-style:italic; font-size:clamp(24px,5.5vw,40px); line-height:1.25; max-width:18ch; min-height:1.4em; color:var(--ink); transition:opacity .9s; opacity:0;}
+  .cue.show{opacity:1;}
+  .clock{font-family:var(--serif); font-size:28px; color:var(--muted); margin-top:20px; letter-spacing:.02em; opacity:0; transition:opacity .5s;}
+  .clock.show{opacity:.8;}
+
+  .controls{position:fixed; bottom:34px; left:0; right:0; z-index:3; display:flex; gap:26px; justify-content:center; align-items:center;}
+  .ctl{background:none; border:none; color:var(--muted); cursor:pointer; font-family:var(--sans); font-size:12.5px; letter-spacing:.04em; padding:8px 6px; transition:.25s;}
+  .ctl:hover{color:var(--ink);}
+
+  .hidden{display:none !important;}
+  .fade-out{animation:fadeOut .8s forwards;}
+  @keyframes fadeOut{to{opacity:0; transform:translateY(-6px);}}
+  .fade-in{animation:fadeIn 1s forwards;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
+
+  .note{position:fixed; bottom:8px; left:0; right:0; text-align:center; color:var(--faint); font-size:10.5px; z-index:3; letter-spacing:.04em;}
+</style>
+</head>
+<body>
+
+<div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
+<div class="grain"></div>
+
+<div class="stage">
+
+  <!-- SETUP -->
+  <section id="setup" class="fade-in">
+    <div class="kicker">a guided descent into focus</div>
+    <h1 class="title">The Zone</h1>
+    <p class="sub">A few minutes to settle in, then sound carries you the rest of the way. I'll stay quiet while you work.</p>
+
+    <div class="presets" id="presets">
+      <button class="chip" data-total="25" data-trans="2">Sprint<small>25 min</small></button>
+      <button class="chip on" data-total="50" data-trans="3">Deep<small>50 min</small></button>
+      <button class="chip" data-total="90" data-trans="4">Ultradian<small>90 min</small></button>
+    </div>
+
+    <div class="opts">
+      <div class="opt on" id="optVoice"><span class="tg"></span>Voice guide</div>
+      <div class="opt on" id="optMusic"><span class="tg"></span>Soundscape</div>
+      <div class="opt" id="optBinaural"><span class="tg"></span>Binaural layer</div>
+    </div>
+
+    <button class="start" id="startBtn">Begin</button>
+  </section>
+
+  <!-- SESSION -->
+  <section id="session" class="hidden">
+    <div class="orb-wrap">
+      <div class="ring"></div>
+      <svg class="ring prog" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="49.5" fill="none" stroke="rgba(232,162,104,.5)" stroke-width="0.5"
+                stroke-dasharray="311" stroke-dashoffset="311" id="progArc" stroke-linecap="round"/>
+      </svg>
+      <div class="orb" id="orb"></div>
+    </div>
+    <div class="phase" id="phaseLabel">Arriving</div>
+    <div class="cue" id="cue"></div>
+    <div class="clock" id="clock">00:00</div>
+  </section>
+</div>
+
+<div class="controls hidden" id="controls">
+  <button class="ctl" id="clockToggle">show time</button>
+  <button class="ctl" id="muteVoice">mute voice</button>
+  <button class="ctl" id="endBtn">end session</button>
+</div>
+
+<div class="note" id="bottomNote"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const cfg = {
+    totalMin: 50,
+    transMin: 3,
+    anchorEveryMin: 20,
+    emergenceSec: 60,
+    voice: true,
+    music: true,
+    binaural: false,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const setup = $('setup'), session = $('session'), controls = $('controls');
+  const orb = $('orb'), phaseLabel = $('phaseLabel'), cueEl = $('cue'), clockEl = $('clock');
+  const progArc = $('progArc'), bottomNote = $('bottomNote');
+  const ARC_LEN = 311;
+
+  document.querySelectorAll('#presets .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#presets .chip').forEach(c => c.classList.remove('on'));
+      chip.classList.add('on');
+      cfg.totalMin = +chip.dataset.total;
+      cfg.transMin = +chip.dataset.trans;
+    });
+  });
+  const bindToggle = (el, key) => $(el).addEventListener('click', () => {
+    $(el).classList.toggle('on');
+    cfg[key] = $(el).classList.contains('on');
+  });
+  bindToggle('optVoice', 'voice');
+  bindToggle('optMusic', 'music');
+  bindToggle('optBinaural', 'binaural');
+
+  let voices = [], chosenVoice = null, voiceMuted = false;
+  function pickVoice() {
+    voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+    if (!voices.length) return;
+    const pref = ['Samantha','Google UK English Female','Google US English','Serena','Karen','Moira','Fiona','Victoria'];
+    for (const name of pref) { const v = voices.find(x => x.name === name); if (v) { chosenVoice = v; return; } }
+    chosenVoice = voices.find(v => /en[-_]/i.test(v.lang)) || voices[0];
+  }
+  if (window.speechSynthesis) {
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;
+  }
+  function say(text) {
+    if (!cfg.voice || voiceMuted || !window.speechSynthesis) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (chosenVoice) u.voice = chosenVoice;
+      u.rate = 0.82; u.pitch = 0.92; u.volume = 0.95;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  const audio = { ready:false };
+  async function initAudio() {
+    if (!window.Tone || !cfg.music) return;
+    try {
+      await Tone.start();
+
+      audio.master = new Tone.Gain(0).toDestination();
+      audio.reverb = new Tone.Reverb({ decay: 8, wet: 0.5 }).connect(audio.master);
+
+      audio.noise = new Tone.Noise('brown').start();
+      audio.noiseFilter = new Tone.Filter({ type:'lowpass', frequency:480, Q:0.4 });
+      audio.noiseGain = new Tone.Gain(0.32);
+      audio.noise.connect(audio.noiseFilter); audio.noiseFilter.connect(audio.noiseGain); audio.noiseGain.connect(audio.master);
+      audio.sweep = new Tone.LFO({ frequency:0.02, min:300, max:620 }).start();
+      audio.sweep.connect(audio.noiseFilter.frequency);
+
+      audio.padGain = new Tone.Gain(0).connect(audio.reverb);
+      audio.pad = new Tone.PolySynth(Tone.Synth, {
+        oscillator:{ type:'sine' },
+        envelope:{ attack:6, decay:2, sustain:0.8, release:10 },
+        volume:-20
+      }).connect(audio.padGain);
+
+      audio.binL = new Tone.Oscillator(196, 'sine');
+      audio.binR = new Tone.Oscillator(203, 'sine');
+      audio.panL = new Tone.Panner(-1); audio.panR = new Tone.Panner(1);
+      audio.binGain = new Tone.Gain(0).connect(audio.master);
+      audio.binL.connect(audio.panL); audio.panL.connect(audio.binGain);
+      audio.binR.connect(audio.panR); audio.panR.connect(audio.binGain);
+
+      audio.bell = new Tone.Synth({ oscillator:{ type:'sine' }, envelope:{ attack:0.01, decay:1.4, sustain:0, release:3 }, volume:-12 }).connect(audio.reverb);
+
+      audio.ready = true;
+    } catch (e) { audio.ready = false; }
+  }
+  const ramp = (g, v, t=3) => { try { g && g.gain.rampTo(v, t); } catch(e){} };
+  function chime(note='C5') { if (audio.ready) { try { audio.bell.triggerAttackRelease(note, 2); } catch(e){} } }
+
+  function startBed() {
+    if (!audio.ready) return;
+    ramp(audio.master, 0.7, 4);
+    ramp(audio.padGain, 0.5, 8);
+    try { audio.pad.triggerAttack(['A2','E3','A3']); } catch(e){}
+    if (cfg.binaural) { try { audio.binL.start(); audio.binR.start(); } catch(e){} ramp(audio.binGain, 0.04, 6); }
+  }
+  function fadeAll() {
+    if (!audio.ready) return;
+    ramp(audio.master, 0, 6); ramp(audio.padGain, 0, 6); ramp(audio.binGain, 0, 4);
+    try { audio.pad.releaseAll(); } catch(e){}
+  }
+
+  let t0 = 0, raf = 0, lastAnchor = 0, ended = false, inZone = false;
+  let cueQueue = [], breatheTimer = null, clockVisible = false;
+
+  function showCue(text) {
+    cueEl.classList.remove('show');
+    setTimeout(() => { cueEl.textContent = text; cueEl.classList.add('show'); }, 350);
+  }
+  function fmt(s){ s=Math.max(0,Math.round(s)); return String((s/60|0)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+  function buildTransitionCues() {
+    const T = cfg.transMin * 60;
+    return [
+      { at: 1,        say:'Welcome. Settle into a comfortable position, and let your shoulders drop.', cue:'Settle in.' },
+      { at: 9,        say:'For the next couple of minutes there is nothing to achieve. We are only arriving.', cue:'Nothing to achieve yet.' },
+      { at: 18,       say:'Let\'s breathe together. Follow the light. In through the nose.', cue:'Breathe with the light.', breathe:true },
+      { at: T-55,     say:'Now bring to mind the one thing you are here to do. See it clearly.', cue:'The one thing.', breathe:false },
+      { at: T-22,     say:'Hold only that. Everything else can wait.', cue:'Hold only that.' },
+      { at: T-6,      say:'Good. The sound is rising now. Let the world fall away.', cue:'Let it fall away.' },
+    ];
+  }
+
+  const anchorLines = [
+    { say:'Still here. Stay with it.',                  cue:'Stay with it.' },
+    { say:'If you have drifted, gently come back.',      cue:'Come back, gently.' },
+    { say:'You are doing well. Continue.',               cue:'Continue.' },
+    { say:'One thing. Right now. That is all.',          cue:'One thing.' },
+  ];
+  let anchorIdx = 0;
+
+  const breathSteps = [
+    { label:'Breathe in',  scale:1.42, ms:4000 },
+    { label:'Hold',        scale:1.42, ms:4000 },
+    { label:'Breathe out', scale:1.0,  ms:4000 },
+    { label:'Hold',        scale:1.0,  ms:4000 },
+  ];
+  let breathOn = false, breathStep = 0;
+  function runBreath() {
+    if (!breathOn) return;
+    const s = breathSteps[breathStep % breathSteps.length];
+    orb.style.transition = `transform ${s.ms}ms ease-in-out`;
+    orb.style.transform = `scale(${s.scale})`;
+    showCue(s.label);
+    breathStep++;
+    breatheTimer = setTimeout(runBreath, s.ms);
+  }
+  function startBreath(){ breathOn = true; breathStep = 0; runBreath(); }
+  function stopBreath(){ breathOn = false; clearTimeout(breatheTimer); orb.style.transition='transform 1.2s ease'; orb.style.transform='scale(1)'; }
+
+  function enterZone() {
+    inZone = true;
+    stopBreath();
+    orb.classList.add('zone');
+    phaseLabel.classList.add('zone');
+    phaseLabel.textContent = 'In the zone';
+    chime('G5');
+    startBed();
+    say('You are in the zone. I will be quiet now.');
+    setTimeout(() => showCue('—'), 400);
+    setTimeout(() => cueEl.classList.remove('show'), 4200);
+    lastAnchor = cfg.transMin * 60;
+  }
+
+  function tick() {
+    if (ended) return;
+    const elapsed = (performance.now() - t0) / 1000;
+    const total = cfg.totalMin * 60;
+    const trans = cfg.transMin * 60;
+    const remaining = total - elapsed;
+
+    progArc.style.strokeDashoffset = ARC_LEN * (1 - Math.min(elapsed/total, 1));
+    if (clockVisible) clockEl.textContent = fmt(remaining);
+
+    while (cueQueue.length && elapsed >= cueQueue[0].at) {
+      const c = cueQueue.shift();
+      if (c.breathe === true) startBreath();
+      if (c.breathe === false) stopBreath();
+      say(c.say); showCue(c.cue);
+    }
+
+    if (!inZone && elapsed >= trans) enterZone();
+
+    if (inZone && remaining > cfg.emergenceSec + 30) {
+      if (elapsed - lastAnchor >= cfg.anchorEveryMin * 60) {
+        lastAnchor = elapsed;
+        const a = anchorLines[anchorIdx++ % anchorLines.length];
+        chime('E5'); say(a.say);
+        showCue(a.cue);
+        setTimeout(() => { if (inZone && !ended) cueEl.classList.remove('show'); }, 7000);
+      }
+    }
+
+    if (inZone && !ended && remaining <= cfg.emergenceSec && remaining > cfg.emergenceSec - 1.2) {
+      phaseLabel.textContent = 'Emerging';
+      phaseLabel.classList.remove('zone');
+      chime('C5'); say('Start bringing your work to a close. Finish the thought you are on.');
+      showCue('Bring it to a close.');
+    }
+
+    if (remaining <= 0) { finish(); return; }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function finish() {
+    ended = true;
+    cancelAnimationFrame(raf);
+    fadeAll();
+    setTimeout(() => chime('A4'), 200);
+    phaseLabel.textContent = 'Complete';
+    phaseLabel.classList.remove('zone');
+    orb.classList.remove('zone');
+    showCue('That\'s the session. Well done.');
+    say('That is the session. Well done.');
+    setTimeout(() => { $('clockToggle').classList.add('hidden'); $('muteVoice').classList.add('hidden'); $('endBtn').textContent = 'begin again'; }, 1000);
+  }
+
+  $('clockToggle').addEventListener('click', () => {
+    clockVisible = !clockVisible;
+    clockEl.classList.toggle('show', clockVisible);
+    $('clockToggle').textContent = clockVisible ? 'hide time' : 'show time';
+  });
+  $('muteVoice').addEventListener('click', () => {
+    voiceMuted = !voiceMuted;
+    if (voiceMuted && window.speechSynthesis) speechSynthesis.cancel();
+    $('muteVoice').textContent = voiceMuted ? 'unmute voice' : 'mute voice';
+  });
+  $('endBtn').addEventListener('click', () => location.reload());
+
+  $('startBtn').addEventListener('click', async () => {
+    bottomNote.textContent = (cfg.binaural ? 'Use headphones for the binaural layer. ' : '') + 'Find a calm spot. Phone face down.';
+    cueQueue = buildTransitionCues();
+    await initAudio();
+    if (cfg.music && !audio.ready) bottomNote.textContent = 'Soundscape unavailable in this view — voice and timer still active.';
+
+    setup.classList.add('fade-out');
+    setTimeout(() => {
+      setup.classList.add('hidden');
+      session.classList.remove('hidden');
+      session.classList.add('fade-in');
+      controls.classList.remove('hidden');
+      ended = false; inZone = false; anchorIdx = 0;
+      t0 = performance.now();
+      raf = requestAnimationFrame(tick);
+    }, 800);
+  });
+})();
+</script>
+</body>
+</html>
